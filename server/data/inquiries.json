@@ -1,0 +1,12 @@
+[
+  {
+    "id": "INQ-1787557794261",
+    "name": "Numan Test",
+    "email": "numan@example.com",
+    "phone": "01819861950",
+    "subject": "General Inquiry",
+    "message": "Assalamu Alaikum. Testing contact submission.",
+    "status": "Unread",
+    "submittedAt": "2026-08-24T07:49:54.261Z"
+  }
+]

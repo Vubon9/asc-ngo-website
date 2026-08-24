@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from 'react';
+import { X, Lock, Mail, Users, Trash2, RefreshCw, CheckCircle, ShieldAlert } from 'lucide-react';
+
+export default function AdminPortal({ isOpen, onClose }) {
+  const [activeTab, setActiveTab] = useState('inquiries');
+  const [inquiries, setInquiries] = useState([]);
+  const [volunteers, setVolunteers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [passcode, setPasscode] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  const fetchAdminData = async () => {
+    setLoading(true);
+    try {
+      const [inqRes, volRes] = await Promise.all([
+        fetch('/api/admin/inquiries'),
+        fetch('/api/admin/volunteers')
+      ]);
+
+      if (inqRes.ok) {
+        const data = await inqRes.json();
+        setInquiries(data.inquiries || []);
+      }
+      if (volRes.ok) {
+        const data = await volRes.json();
+        setVolunteers(data.volunteers || []);
+      }
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && authenticated) {
+      fetchAdminData();
+    }
+  }, [isOpen, authenticated]);
+
+  if (!isOpen) return null;
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (passcode === 'asc2001' || passcode === 'admin') {
+      setAuthenticated(true);
+      setAuthError('');
+    } else {
+      setAuthError('Incorrect Admin Passcode. Hint: asc2001');
+    }
+  };
+
+  const handleDeleteInquiry = async (id) => {
+    if (!confirm('Are you sure you want to delete this inquiry?')) return;
+    try {
+      const res = await fetch(`/api/admin/inquiries/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setInquiries(prev => prev.filter(item => item.id !== id));
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  const handleDeleteVolunteer = async (id) => {
+    if (!confirm('Are you sure you want to delete this volunteer application?')) return;
+    try {
+      const res = await fetch(`/api/admin/volunteers/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setVolunteers(prev => prev.filter(item => item.id !== id));
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 relative overflow-hidden">
+        
+        {/* Header */}
+        <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Lock className="w-5 h-5 text-cyan-400" />
+            <div>
+              <h3 className="font-bold text-lg leading-tight">ASC Executive Admin Portal</h3>
+              <p className="text-xs text-slate-400">Assistance for Safe Community - Internal Management</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Area */}
+        {!authenticated ? (
+          <div className="p-8 max-w-md mx-auto my-auto text-center space-y-4">
+            <ShieldAlert className="w-12 h-12 text-cyan-600 mx-auto" />
+            <h4 className="font-bold text-slate-900 text-lg">Admin Authentication</h4>
+            <p className="text-xs text-slate-500">Enter the administrator passcode to view backend inquiries & volunteer applications.</p>
+
+            <form onSubmit={handleLogin} className="space-y-3">
+              {authError && <p className="text-xs font-semibold text-rose-600">{authError}</p>}
+              <input
+                type="password"
+                placeholder="Enter Passcode (e.g. asc2001)"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-center text-sm font-mono focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="w-full bg-cyan-700 hover:bg-cyan-800 text-white font-bold py-2.5 rounded-lg text-sm"
+              >
+                Access Admin Dashboard
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            
+            {/* Tabs Bar */}
+            <div className="bg-slate-100 border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setActiveTab('inquiries')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+                    activeTab === 'inquiries'
+                      ? 'bg-cyan-700 text-white shadow-sm'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Mail className="w-4 h-4" />
+                  Inquiries ({inquiries.length})
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('volunteers')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+                    activeTab === 'volunteers'
+                      ? 'bg-emerald-700 text-white shadow-sm'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  Volunteer Applications ({volunteers.length})
+                </button>
+              </div>
+
+              <button
+                onClick={fetchAdminData}
+                disabled={loading}
+                className="text-xs font-semibold text-slate-600 hover:text-cyan-700 flex items-center gap-1 bg-white border border-slate-200 px-3 py-1.5 rounded-md"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+
+            {/* Submissions List */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {activeTab === 'inquiries' ? (
+                inquiries.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    No contact inquiries received yet. Submit a test message on the website!
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {inquiries.map((inq) => (
+                      <div key={inq.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 relative">
+                        <button
+                          onClick={() => handleDeleteInquiry(inq.id)}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-rose-600 p-1"
+                          title="Delete inquiry"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-cyan-100 text-cyan-800">
+                            {inq.subject}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            {new Date(inq.submittedAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <h5 className="font-bold text-slate-900 text-sm">{inq.name} ({inq.email} | {inq.phone})</h5>
+                        <p className="text-slate-700 text-xs bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
+                          {inq.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                volunteers.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 text-sm">
+                    No volunteer applications submitted yet.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {volunteers.map((vol) => (
+                      <div key={vol.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 relative">
+                        <button
+                          onClick={() => handleDeleteVolunteer(vol.id)}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-rose-600 p-1"
+                          title="Delete application"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            Interest: {vol.interestArea}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            {new Date(vol.appliedAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <h5 className="font-bold text-slate-900 text-sm">{vol.fullName}</h5>
+                        <p className="text-xs text-slate-600">Email: {vol.email} | Phone: {vol.phone} | Skills: {vol.skills}</p>
+                        {vol.note && (
+                          <p className="text-slate-700 text-xs bg-white p-3 rounded-lg border border-slate-200">
+                            {vol.note}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
