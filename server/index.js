@@ -15,10 +15,11 @@ const PORT = process.env.PORT || 5001;
 app.use(cors());
 app.use(express.json());
 
-// Ensure data directory and storage files exist
+// Data Storage Setup
 const dataDir = path.join(__dirname, 'data');
 const inquiriesFile = path.join(dataDir, 'inquiries.json');
 const volunteersFile = path.join(dataDir, 'volunteers.json');
+const donationsFile = path.join(dataDir, 'donations.json');
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -82,15 +83,16 @@ app.get('/api/info', (req, res) => {
   });
 });
 
-// Programs Endpoint (with filter & search)
+// Programs Endpoint (with filter, search, & SDG tags)
 app.get('/api/programs', (req, res) => {
-  const { search, donor, upazila } = req.query;
+  const { search, donor, upazila, sdg } = req.query;
   let results = [...programsData];
 
   if (search) {
     const q = search.toString().toLowerCase();
     results = results.filter(p =>
       p.title.toLowerCase().includes(q) ||
+      (p.titleBn && p.titleBn.toLowerCase().includes(q)) ||
       p.description.toLowerCase().includes(q) ||
       p.category.toLowerCase().includes(q) ||
       p.upazila.toLowerCase().includes(q)
@@ -103,6 +105,10 @@ app.get('/api/programs', (req, res) => {
 
   if (upazila) {
     results = results.filter(p => p.upazila.toLowerCase().includes(upazila.toString().toLowerCase()));
+  }
+
+  if (sdg) {
+    results = results.filter(p => p.sdgs && p.sdgs.includes(sdg.toString()));
   }
 
   res.json({
@@ -179,6 +185,43 @@ app.post('/api/volunteer', (req, res) => {
   });
 });
 
+// Donation / Impact Support API (with bKash, Nagad, Bank, TrxID)
+app.post('/api/donate', (req, res) => {
+  const { donorName, email, phone, amount, currency, paymentMethod, trxId, impactOption, note } = req.body;
+
+  if (!donorName || !email || !amount) {
+    return res.status(400).json({
+      success: false,
+      error: "Donor Name, Email, and Amount are required."
+    });
+  }
+
+  const donations = readJSONFile(donationsFile);
+  const newDonation = {
+    id: 'DON-' + Date.now(),
+    donorName,
+    email,
+    phone: phone || 'N/A',
+    amount: Number(amount),
+    currency: currency || 'BDT',
+    paymentMethod: paymentMethod || 'bKash',
+    trxId: trxId || 'N/A',
+    impactOption: impactOption || 'General Support',
+    note: note || '',
+    status: 'Received / Verified',
+    donatedAt: new Date().toISOString()
+  };
+
+  donations.unshift(newDonation);
+  writeJSONFile(donationsFile, donations);
+
+  res.status(201).json({
+    success: true,
+    message: `Thank you ${donorName}! Your ${paymentMethod} donation of ${currency === 'USD' ? '$' : '৳'}${amount} has been received!`,
+    donationId: newDonation.id
+  });
+});
+
 // Admin APIs for ASC Management
 app.get('/api/admin/inquiries', (req, res) => {
   const inquiries = readJSONFile(inquiriesFile);
@@ -188,6 +231,11 @@ app.get('/api/admin/inquiries', (req, res) => {
 app.get('/api/admin/volunteers', (req, res) => {
   const volunteers = readJSONFile(volunteersFile);
   res.json({ total: volunteers.length, volunteers });
+});
+
+app.get('/api/admin/donations', (req, res) => {
+  const donations = readJSONFile(donationsFile);
+  res.json({ total: donations.length, donations });
 });
 
 app.delete('/api/admin/inquiries/:id', (req, res) => {
@@ -204,6 +252,36 @@ app.delete('/api/admin/volunteers/:id', (req, res) => {
   volunteers = volunteers.filter(item => item.id !== id);
   writeJSONFile(volunteersFile, volunteers);
   res.json({ success: true, message: `Volunteer record ${id} deleted.` });
+});
+
+app.delete('/api/admin/donations/:id', (req, res) => {
+  const { id } = req.params;
+  let donations = readJSONFile(donationsFile);
+  donations = donations.filter(item => item.id !== id);
+  writeJSONFile(donationsFile, donations);
+  res.json({ success: true, message: `Donation record ${id} deleted.` });
+});
+
+// Admin Export Endpoint
+app.get('/api/admin/export', (req, res) => {
+  const inquiries = readJSONFile(inquiriesFile);
+  const volunteers = readJSONFile(volunteersFile);
+  const donations = readJSONFile(donationsFile);
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename=asc-ngo-portal-export.json');
+  res.json({
+    exportedAt: new Date().toISOString(),
+    organization: "Assistance for Safe Community (ASC)",
+    summary: {
+      inquiriesCount: inquiries.length,
+      volunteersCount: volunteers.length,
+      donationsCount: donations.length
+    },
+    inquiries,
+    volunteers,
+    donations
+  });
 });
 
 // Health check

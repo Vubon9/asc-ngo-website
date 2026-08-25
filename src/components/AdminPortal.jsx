@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, Mail, Users, Heart, Trash2, RefreshCw, Download, ShieldAlert } from 'lucide-react';
+import { X, Lock, Mail, Users, Heart, Trash2, RefreshCw, Download, ShieldAlert, CreditCard, Smartphone, Building2 } from 'lucide-react';
 
 export default function AdminPortal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('inquiries');
@@ -107,7 +107,7 @@ export default function AdminPortal({ isOpen, onClose }) {
             <Lock className="w-5 h-5 text-cyan-400" />
             <div>
               <h3 className="font-bold text-lg leading-tight">ASC Executive Admin Portal</h3>
-              <p className="text-xs text-slate-400">Assistance for Safe Community - Internal Management Suite</p>
+              <p className="text-xs text-slate-400">Assistance for Safe Community - Management & Donations Suite</p>
             </div>
           </div>
 
@@ -137,7 +137,7 @@ export default function AdminPortal({ isOpen, onClose }) {
           <div className="p-8 max-w-md mx-auto my-auto text-center space-y-4">
             <ShieldAlert className="w-12 h-12 text-cyan-600 mx-auto" />
             <h4 className="font-bold text-slate-900 text-lg">Admin Authentication</h4>
-            <p className="text-xs text-slate-500">Enter administrator passcode to access inquiries, volunteers, and donation records.</p>
+            <p className="text-xs text-slate-500">Enter administrator passcode to access inquiries, volunteers, and bKash / Nagad / Bank donations.</p>
 
             <form onSubmit={handleLogin} className="space-y-3">
               {authError && <p className="text-xs font-semibold text-rose-600">{authError}</p>}
@@ -287,7 +287,7 @@ export default function AdminPortal({ isOpen, onClose }) {
               {activeTab === 'donations' && (
                 donations.length === 0 ? (
                   <div className="text-center py-12 text-slate-500 text-sm">
-                    No donation pledges submitted yet. Use the "Donate" button to submit a pledge!
+                    No bKash, Nagad, or Bank donations submitted yet. Use the "Donate" button to test!
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -300,18 +300,35 @@ export default function AdminPortal({ isOpen, onClose }) {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-rose-100 text-rose-800">
                             Amount: {don.currency === 'USD' ? '$' : '৳'}{don.amount}
                           </span>
-                          <span className="text-xs font-semibold text-cyan-800">
-                            Impact: {don.impactOption}
+
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-purple-100 text-purple-800 flex items-center gap-1">
+                            <Smartphone className="w-3 h-3" />
+                            Method: {don.paymentMethod}
                           </span>
-                          <span className="text-xs text-slate-400">
+
+                          {don.trxId && (
+                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded bg-slate-200 text-slate-800">
+                              TrxID: {don.trxId}
+                            </span>
+                          )}
+
+                          <span className="text-xs text-slate-400 ml-auto">
                             {new Date(don.donatedAt).toLocaleString()}
                           </span>
                         </div>
-                        <h5 className="font-bold text-slate-900 text-sm">{don.donorName} ({don.email} | Phone: {don.phone})</h5>
+
+                        <h5 className="font-bold text-slate-900 text-sm">
+                          {don.donorName} ({don.email} | Sender Phone: {don.phone})
+                        </h5>
+
+                        <p className="text-xs text-cyan-800 font-semibold">
+                          Impact Goal: {don.impactOption}
+                        </p>
+
                         {don.note && (
                           <p className="text-slate-700 text-xs bg-white p-3 rounded-lg border border-slate-200">
                             {don.note}
