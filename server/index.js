@@ -1,8 +1,13 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { connectDB, getIsConnected } from './db.js';
+import { InquiryModel } from './models/Inquiry.js';
+import { VolunteerModel } from './models/Volunteer.js';
+import { DonationModel } from './models/Donation.js';
 import { programsData } from './data/programsData.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,11 +16,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Connect to MongoDB Database
+connectDB();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Data Storage Setup
+// Local File Data Storage Setup (Fallback)
 const dataDir = path.join(__dirname, 'data');
 const inquiriesFile = path.join(dataDir, 'inquiries.json');
 const volunteersFile = path.join(dataDir, 'volunteers.json');
@@ -56,6 +64,7 @@ app.get('/api/info', (req, res) => {
     shortName: "ASC",
     legalEntity: "Not-for-Profit Organization (NGO)",
     formationDate: "2001-12-01",
+    database: getIsConnected() ? "MongoDB Atlas / Mongoose" : "Local JSON Storage (Fallback)",
     registrations: [
       {
         authority: "Directorate of Social Services, Govt of Bangladesh",
@@ -117,8 +126,8 @@ app.get('/api/programs', (req, res) => {
   });
 });
 
-// Contact Submission API
-app.post('/api/contact', (req, res) => {
+// Contact Submission API (MongoDB + JSON Fallback)
+app.post('/api/contact', async (req, res) => {
   const { name, email, phone, subject, message } = req.body;
 
   if (!name || !email || !message) {
@@ -128,9 +137,9 @@ app.post('/api/contact', (req, res) => {
     });
   }
 
-  const inquiries = readJSONFile(inquiriesFile);
-  const newInquiry = {
-    id: 'INQ-' + Date.now(),
+  const inquiryId = 'INQ-' + Date.now();
+  const inquiryData = {
+    inquiryId,
     name,
     email,
     phone: phone || 'N/A',
@@ -140,18 +149,28 @@ app.post('/api/contact', (req, res) => {
     submittedAt: new Date().toISOString()
   };
 
-  inquiries.unshift(newInquiry);
-  writeJSONFile(inquiriesFile, inquiries);
+  try {
+    if (getIsConnected()) {
+      await InquiryModel.create(inquiryData);
+    } else {
+      const inquiries = readJSONFile(inquiriesFile);
+      inquiries.unshift({ id: inquiryId, ...inquiryData });
+      writeJSONFile(inquiriesFile, inquiries);
+    }
 
-  res.status(201).json({
-    success: true,
-    message: "Thank you for reaching out to ASC. Your message has been received!",
-    inquiryId: newInquiry.id
-  });
+    res.status(201).json({
+      success: true,
+      message: "Thank you for reaching out to ASC. Your message has been received!",
+      inquiryId
+    });
+  } catch (err) {
+    console.error("Error saving inquiry:", err);
+    res.status(500).json({ success: false, error: "Internal database error." });
+  }
 });
 
-// Volunteer / Support Request API
-app.post('/api/volunteer', (req, res) => {
+// Volunteer Application API (MongoDB + JSON Fallback)
+app.post('/api/volunteer', async (req, res) => {
   const { fullName, email, phone, address, skills, interestArea, note } = req.body;
 
   if (!fullName || !email || !phone) {
@@ -161,9 +180,9 @@ app.post('/api/volunteer', (req, res) => {
     });
   }
 
-  const volunteers = readJSONFile(volunteersFile);
-  const newVolunteer = {
-    id: 'VOL-' + Date.now(),
+  const volunteerId = 'VOL-' + Date.now();
+  const volunteerData = {
+    volunteerId,
     fullName,
     email,
     phone,
@@ -175,18 +194,28 @@ app.post('/api/volunteer', (req, res) => {
     appliedAt: new Date().toISOString()
   };
 
-  volunteers.unshift(newVolunteer);
-  writeJSONFile(volunteersFile, volunteers);
+  try {
+    if (getIsConnected()) {
+      await VolunteerModel.create(volunteerData);
+    } else {
+      const volunteers = readJSONFile(volunteersFile);
+      volunteers.unshift({ id: volunteerId, ...volunteerData });
+      writeJSONFile(volunteersFile, volunteers);
+    }
 
-  res.status(201).json({
-    success: true,
-    message: "Your application to support Assistance for Safe Community (ASC) was submitted successfully!",
-    volunteerId: newVolunteer.id
-  });
+    res.status(201).json({
+      success: true,
+      message: "Your application to support Assistance for Safe Community (ASC) was submitted successfully!",
+      volunteerId
+    });
+  } catch (err) {
+    console.error("Error saving volunteer:", err);
+    res.status(500).json({ success: false, error: "Internal database error." });
+  }
 });
 
-// Donation / Impact Support API (with bKash, Nagad, Bank, TrxID)
-app.post('/api/donate', (req, res) => {
+// Donation / Impact Support API (bKash, Nagad, Bank - MongoDB + JSON Fallback)
+app.post('/api/donate', async (req, res) => {
   const { donorName, email, phone, amount, currency, paymentMethod, trxId, impactOption, note } = req.body;
 
   if (!donorName || !email || !amount) {
@@ -196,9 +225,9 @@ app.post('/api/donate', (req, res) => {
     });
   }
 
-  const donations = readJSONFile(donationsFile);
-  const newDonation = {
-    id: 'DON-' + Date.now(),
+  const donationId = 'DON-' + Date.now();
+  const donationData = {
+    donationId,
     donorName,
     email,
     phone: phone || 'N/A',
@@ -212,81 +241,161 @@ app.post('/api/donate', (req, res) => {
     donatedAt: new Date().toISOString()
   };
 
-  donations.unshift(newDonation);
-  writeJSONFile(donationsFile, donations);
+  try {
+    if (getIsConnected()) {
+      await DonationModel.create(donationData);
+    } else {
+      const donations = readJSONFile(donationsFile);
+      donations.unshift({ id: donationId, ...donationData });
+      writeJSONFile(donationsFile, donations);
+    }
 
-  res.status(201).json({
-    success: true,
-    message: `Thank you ${donorName}! Your ${paymentMethod} donation of ${currency === 'USD' ? '$' : '৳'}${amount} has been received!`,
-    donationId: newDonation.id
-  });
+    res.status(201).json({
+      success: true,
+      message: `Thank you ${donorName}! Your ${paymentMethod} donation of ${currency === 'USD' ? '$' : '৳'}${amount} has been recorded!`,
+      donationId
+    });
+  } catch (err) {
+    console.error("Error saving donation:", err);
+    res.status(500).json({ success: false, error: "Internal database error." });
+  }
 });
 
 // Admin APIs for ASC Management
-app.get('/api/admin/inquiries', (req, res) => {
-  const inquiries = readJSONFile(inquiriesFile);
-  res.json({ total: inquiries.length, inquiries });
+app.get('/api/admin/inquiries', async (req, res) => {
+  try {
+    if (getIsConnected()) {
+      const inquiries = await InquiryModel.find().sort({ submittedAt: -1 }).lean();
+      const formatted = inquiries.map(i => ({ id: i.inquiryId || i._id, ...i }));
+      res.json({ total: formatted.length, inquiries: formatted });
+    } else {
+      const inquiries = readJSONFile(inquiriesFile);
+      res.json({ total: inquiries.length, inquiries });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/api/admin/volunteers', (req, res) => {
-  const volunteers = readJSONFile(volunteersFile);
-  res.json({ total: volunteers.length, volunteers });
+app.get('/api/admin/volunteers', async (req, res) => {
+  try {
+    if (getIsConnected()) {
+      const volunteers = await VolunteerModel.find().sort({ appliedAt: -1 }).lean();
+      const formatted = volunteers.map(v => ({ id: v.volunteerId || v._id, ...v }));
+      res.json({ total: formatted.length, volunteers: formatted });
+    } else {
+      const volunteers = readJSONFile(volunteersFile);
+      res.json({ total: volunteers.length, volunteers });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/api/admin/donations', (req, res) => {
-  const donations = readJSONFile(donationsFile);
-  res.json({ total: donations.length, donations });
+app.get('/api/admin/donations', async (req, res) => {
+  try {
+    if (getIsConnected()) {
+      const donations = await DonationModel.find().sort({ donatedAt: -1 }).lean();
+      const formatted = donations.map(d => ({ id: d.donationId || d._id, ...d }));
+      res.json({ total: formatted.length, donations: formatted });
+    } else {
+      const donations = readJSONFile(donationsFile);
+      res.json({ total: donations.length, donations });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/admin/inquiries/:id', (req, res) => {
+app.delete('/api/admin/inquiries/:id', async (req, res) => {
   const { id } = req.params;
-  let inquiries = readJSONFile(inquiriesFile);
-  inquiries = inquiries.filter(item => item.id !== id);
-  writeJSONFile(inquiriesFile, inquiries);
-  res.json({ success: true, message: `Inquiry ${id} deleted.` });
+  try {
+    if (getIsConnected()) {
+      await InquiryModel.deleteOne({ $or: [{ inquiryId: id }, { _id: id }] });
+    }
+    let inquiries = readJSONFile(inquiriesFile);
+    inquiries = inquiries.filter(item => item.id !== id && item.inquiryId !== id);
+    writeJSONFile(inquiriesFile, inquiries);
+    res.json({ success: true, message: `Inquiry ${id} deleted.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/admin/volunteers/:id', (req, res) => {
+app.delete('/api/admin/volunteers/:id', async (req, res) => {
   const { id } = req.params;
-  let volunteers = readJSONFile(volunteersFile);
-  volunteers = volunteers.filter(item => item.id !== id);
-  writeJSONFile(volunteersFile, volunteers);
-  res.json({ success: true, message: `Volunteer record ${id} deleted.` });
+  try {
+    if (getIsConnected()) {
+      await VolunteerModel.deleteOne({ $or: [{ volunteerId: id }, { _id: id }] });
+    }
+    let volunteers = readJSONFile(volunteersFile);
+    volunteers = volunteers.filter(item => item.id !== id && item.volunteerId !== id);
+    writeJSONFile(volunteersFile, volunteers);
+    res.json({ success: true, message: `Volunteer record ${id} deleted.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/admin/donations/:id', (req, res) => {
+app.delete('/api/admin/donations/:id', async (req, res) => {
   const { id } = req.params;
-  let donations = readJSONFile(donationsFile);
-  donations = donations.filter(item => item.id !== id);
-  writeJSONFile(donationsFile, donations);
-  res.json({ success: true, message: `Donation record ${id} deleted.` });
+  try {
+    if (getIsConnected()) {
+      await DonationModel.deleteOne({ $or: [{ donationId: id }, { _id: id }] });
+    }
+    let donations = readJSONFile(donationsFile);
+    donations = donations.filter(item => item.id !== id && item.donationId !== id);
+    writeJSONFile(donationsFile, donations);
+    res.json({ success: true, message: `Donation record ${id} deleted.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin Export Endpoint
-app.get('/api/admin/export', (req, res) => {
-  const inquiries = readJSONFile(inquiriesFile);
-  const volunteers = readJSONFile(volunteersFile);
-  const donations = readJSONFile(donationsFile);
+app.get('/api/admin/export', async (req, res) => {
+  try {
+    let inquiries = [];
+    let volunteers = [];
+    let donations = [];
 
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename=asc-ngo-portal-export.json');
-  res.json({
-    exportedAt: new Date().toISOString(),
-    organization: "Assistance for Safe Community (ASC)",
-    summary: {
-      inquiriesCount: inquiries.length,
-      volunteersCount: volunteers.length,
-      donationsCount: donations.length
-    },
-    inquiries,
-    volunteers,
-    donations
-  });
+    if (getIsConnected()) {
+      inquiries = await InquiryModel.find().lean();
+      volunteers = await VolunteerModel.find().lean();
+      donations = await DonationModel.find().lean();
+    } else {
+      inquiries = readJSONFile(inquiriesFile);
+      volunteers = readJSONFile(volunteersFile);
+      donations = readJSONFile(donationsFile);
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename=asc-ngo-portal-export.json');
+    res.json({
+      exportedAt: new Date().toISOString(),
+      organization: "Assistance for Safe Community (ASC)",
+      databaseConnected: getIsConnected() ? "MongoDB Atlas" : "Local Storage",
+      summary: {
+        inquiriesCount: inquiries.length,
+        volunteersCount: volunteers.length,
+        donationsCount: donations.length
+      },
+      inquiries,
+      volunteers,
+      donations
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date() });
+  res.json({
+    status: 'OK',
+    database: getIsConnected() ? 'MongoDB Connected' : 'Local JSON Fallback',
+    timestamp: new Date()
+  });
 });
 
 // Serve frontend dist build in production
